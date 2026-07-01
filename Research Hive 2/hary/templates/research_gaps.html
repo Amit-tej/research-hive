@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Hive - Research Gap Finder</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='research_gaps.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <!-- Add print styles for better PDF output -->
+    <style>
+        @media print {
+            body { font-family: Arial, sans-serif; margin: 30px; }
+            .navbar, .gaps-sidebar, .gaps-actions, footer { display: none; }
+            .gaps-main { width: 100%; }
+            .gaps-results { box-shadow: none; }
+            .gaps-header h2 { font-size: 24px; }
+            .gaps-section { page-break-inside: avoid; border: 1px solid #ddd; }
+            .gaps-list li { border: 1px solid #eee; }
+        }
+    </style>
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">Research Hive <span class="ai-badge">AI-Enhanced</span></div>
+        <div class="nav-controls">
+            <a href="/" class="nav-link"><i class="fas fa-search"></i> Search</a>
+            <a href="/research-gaps" class="nav-link active"><i class="fas fa-lightbulb"></i> Research Gaps</a>
+            <a href="/chat" class="nav-link"><i class="fas fa-comments"></i> Chat</a>
+        </div>
+    </nav>
+
+    <header class="gaps-hero">
+        <h1><i class="fas fa-lightbulb"></i> Research Gap Finder</h1>
+        <p class="hero-subtitle">Discover unexplored areas and emerging trends in your research field</p>
+    </header>
+
+    <div class="gaps-container">
+    <div class="gaps-sidebar">
+        <div class="sidebar-section">
+            <h3>How It Works</h3>
+            <p>The Research Gap Finder analyzes multiple papers to identify:</p>
+            <ul>
+                <li><i class="fas fa-search"></i> <strong>Research Gaps:</strong> Under-explored areas in the field</li>
+                <li><i class="fas fa-chart-line"></i> <strong>Emerging Trends:</strong> New directions gaining traction</li>
+                <li><i class="fas fa-flask"></i> <strong>Research Opportunities:</strong> Potential projects to address gaps</li>
+            </ul>
+        </div>
+        
+        <div class="sidebar-section">
+            <h3>Search and Add Papers</h3>
+            <input type="text" id="paperSearchInput" placeholder="Search papers to add..." class="search-input">
+            <div id="paperSearchResults" class="paper-search-results"></div>
+        </div>
+        
+        <div class="sidebar-section">
+            <h3>Selected Papers</h3>
+            <div id="selectedPapersList" class="selected-papers-list">
+                <p>No papers selected.</p>
+            </div>
+        </div>
+        
+        <div class="sidebar-section">
+            <h3>Field of Study</h3>
+            <div class="field-input-container">
+                <input type="text" id="fieldInput" placeholder="e.g., Machine Learning" class="field-input">
+            </div>
+        </div>
+        
+        <button id="analyzeButton" class="analyze-button" onclick="analyzeResearchGaps()">
+            <i class="fas fa-lightbulb"></i> Analyze Research Gaps
+        </button>
+    </div>
+    
+    <script>
+        let selectedPapers = [];
+        let searchTimeout = null;
+        
+        document.getElementById('paperSearchInput').addEventListener('input', function() {
+            const query = this.value.trim();
+            clearTimeout(searchTimeout);
+            if (query.length < 3) {
+                document.getElementById('paperSearchResults').innerHTML = '';
+                return;
+            }
+            searchTimeout = setTimeout(() => {
+                searchPapers(query);
+            }, 500);
+        });
+        
+        async function searchPapers(query) {
+            const resultsContainer = document.getElementById('paperSearchResults');
+            resultsContainer.innerHTML = '<p>Searching...</p>';
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({keywords: query, max_results: 5, enable_ai: false})
+                });
+                const data = await response.json();
+                if (data.success && data.papers.length > 0) {
+                    displaySearchResults(data.papers);
+                } else {
+                    resultsContainer.innerHTML = '<p>No papers found.</p>';
+                }
+            } catch (error) {
+                resultsContainer.innerHTML = '<p>Error searching papers.</p>';
+                console.error('Search error:', error);
+            }
+        }
+        
+        function displaySearchResults(papers) {
+            const resultsContainer = document.getElementById('paperSearchResults');
+            resultsContainer.innerHTML = '';
+            papers.forEach((paper, index) => {
+                const paperDiv = document.createElement('div');
+                paperDiv.className = 'paper-result';
+                paperDiv.innerHTML = `
+                    <strong>${paper.title}</strong><br>
+                    <em>${paper.authors}</em> (${paper.year})
+                    <button onclick="addPaper(${index})" class="add-paper-button">Add</button>
+                `;
+                // Store paper data in element dataset for retrieval
+                paperDiv.dataset.paper = JSON.stringify(paper);
+                resultsContainer.appendChild(paperDiv);
+            });
+        }
+        
+        function addPaper(index) {
+            const resultsContainer = document.getElementById('paperSearchResults');
+            const paperDiv = resultsContainer.children[index];
+            if (!paperDiv) return;
+            const paper = JSON.parse(paperDiv.dataset.paper);
+            if (selectedPapers.find(p => p.title === paper.title)) {
+                alert('Paper already selected.');
+                return;
+            }
+            selectedPapers.push(paper);
+            updateSelectedPapersList();
+        }
+        
+        function removePaper(index) {
+            selectedPapers.splice(index, 1);
+            updateSelectedPapersList();
+        }
+        
+        function updateSelectedPapersList() {
+            const listContainer = document.getElementById('selectedPapersList');
+            listContainer.innerHTML = '';
+            if (selectedPapers.length === 0) {
+                listContainer.innerHTML = '<p>No papers selected.</p>';
+                return;
+            }
+            selectedPapers.forEach((paper, index) => {
+                const paperDiv = document.createElement('div');
+                paperDiv.className = 'selected-paper';
+                paperDiv.innerHTML = `
+                    <strong>${paper.title}</strong><br>
+                    <em>${paper.authors}</em> (${paper.year})
+                    <button onclick="removePaper(${index})" class="remove-paper-button">Remove</button>
+                `;
+                listContainer.appendChild(paperDiv);
+            });
+        }
+        
+        async function analyzeResearchGaps() {
+            const field = document.getElementById('fieldInput').value.trim();
+            if (selectedPapers.length < 3) {
+                alert('Please select at least 3 papers for analysis.');
+                return;
+            }
+            if (!field) {
+                alert('Please enter the field of study.');
+                return;
+            }
+            document.getElementById('analyzeButton').disabled = true;
+            document.getElementById('analyzeButton').textContent = 'Analyzing...';
+            try {
+                const response = await fetch('/api/research-gaps', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({papers: selectedPapers, field: field})
+                });
+                const data = await response.json();
+                if (data.success) {
+                    displayGapsResults(data, field);
+                    // Update the global lastSearchPapers to match the selected papers
+                    lastSearchPapers = [...selectedPapers];
+                    lastSearchField = field;
+                } else {
+                    alert(data.error || 'Error analyzing research gaps.');
+                }
+            } catch (error) {
+                alert('Error analyzing research gaps.');
+                console.error('Analysis error:', error);
+            } finally {
+                document.getElementById('analyzeButton').disabled = false;
+                document.getElementById('analyzeButton').innerHTML = '<i class="fas fa-lightbulb"></i> Analyze Research Gaps';
+            }
+        }
+        
+        // This function is now replaced by displayGapsResults
+        function displayResearchGaps(data) {
+            // Forward to the new function
+            displayGapsResults(data, document.getElementById('fieldInput').value.trim() || "this research area");
+        }
+    </script>
+    
+    <div class="gaps-main">
+            <div id="gapsResults" class="gaps-results">
+                <div class="placeholder-message">
+                    <i class="fas fa-lightbulb placeholder-icon"></i>
+                    <h2>Discover Research Opportunities</h2>
+                    <p>Search for papers first, then click "Analyze Research Gaps" to identify unexplored areas and emerging trends in your field.</p>
+                    <p><strong>Note:</strong> You need to add at least 3 papers using the search box on the left before you can analyze research gaps.</p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>LEARNING THROUGH RESEARCH HIVE | <span class="ai-powered">AI-Powered by Groq</span></p>
+    </footer>
+
+    <script>
+        // Initialize variables
+        let lastSearchPapers = [];
+        let lastSearchField = "";
+        
+        // Initialize page
+        document.addEventListener('DOMContentLoaded', function() {
+            // Load papers from session if available
+            checkSessionPapers();
+            
+            // Connect the two implementations
+            // When papers are selected in the first implementation, update the second implementation
+            setInterval(function() {
+                if (selectedPapers.length > 0) {
+                    lastSearchPapers = [...selectedPapers];
+                    lastSearchField = document.getElementById('fieldInput').value.trim();
+                    updatePapersInfo();
+                }
+            }, 2000); // Check every 2 seconds
+        });
+        
+        // Check for papers in session
+        async function checkSessionPapers() {
+            try {
+                // First try to get papers from the current session
+                const sessionResponse = await fetch('/api/research-gaps', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({}) // Empty request to get session data
+                });
+                
+                const sessionData = await sessionResponse.json();
+                
+                // If we have papers in the session, use them
+                if (sessionData.success && sessionData.papers && sessionData.papers.length > 0) {
+                    lastSearchPapers = sessionData.papers;
+                    lastSearchField = sessionData.field || "";
+                    updatePapersInfo();
+                    document.getElementById('fieldInput').value = lastSearchField;
+                    return;
+                }
+                
+                // If no papers in session, don't automatically search
+                // This prevents the default "artificial intelligence" search
+                console.log("No papers found in session. Please search for papers first.");
+                
+            } catch (error) {
+                console.error('Error checking session papers:', error);
+            }
+        }
+        
+        // Update papers info display
+        function updatePapersInfo() {
+            const papersInfoElement = document.getElementById('papersInfo');
+            
+            if (lastSearchPapers.length > 0) {
+                papersInfoElement.innerHTML = `
+                    <p><strong>${lastSearchPapers.length} papers</strong> available for analysis.</p>
+                    <p class="papers-field">From search: "${lastSearchField}"</p>
+                    <div class="papers-list-mini">
+                        ${lastSearchPapers.slice(0, 3).map((paper, index) => `
+                            <div class="paper-item-mini">
+                                <span class="paper-number-mini">${index + 1}</span>
+                                <span class="paper-title-mini">${paper.title}</span>
+                            </div>
+                        `).join('')}
+                        ${lastSearchPapers.length > 3 ? `<div class="more-papers">+${lastSearchPapers.length - 3} more papers</div>` : ''}
+                    </div>
+                `;
+                document.getElementById('analyzeButton').disabled = false;
+            } else {
+                papersInfoElement.innerHTML = `
+                    <p>No papers available for analysis.</p>
+                    <a href="/" class="primary-button"><i class="fas fa-search"></i> Search Papers</a>
+                `;
+                document.getElementById('analyzeButton').disabled = true;
+            }
+        }
+        
+        // Analyze research gaps
+        async function analyzeResearchGaps() {
+            if (lastSearchPapers.length < 3) {
+                showError("At least 3 papers are needed for meaningful analysis. Please search for more papers.");
+                return;
+            }
+            
+            // Get field input
+            const fieldInput = document.getElementById('fieldInput').value.trim() || lastSearchField;
+            
+            // Show loading state
+            const gapsResults = document.getElementById('gapsResults');
+            gapsResults.innerHTML = `
+                <div class="loading-container">
+                    <div class="loading-spinner"></div>
+                    <p>Analyzing research gaps and trends...</p>
+                    <p class="loading-subtext">This may take a minute as we analyze multiple papers.</p>
+                </div>
+            `;
+            
+            try {
+                // Send request to API
+                const response = await fetch('/api/research-gaps', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        papers: lastSearchPapers,
+                        field: fieldInput
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success) {
+                    // Display results
+                    displayGapsResults(data, fieldInput);
+                } else {
+                    showError(data.error || "Unable to analyze research gaps. Please try again.");
+                }
+            } catch (error) {
+                console.error('Error analyzing research gaps:', error);
+                showError("An error occurred while analyzing research gaps. Please try again.");
+            }
+        }
+        
+        // Display research gaps results
+        function displayGapsResults(data, field) {
+            const gapsResults = document.getElementById('gapsResults');
+            
+            const researchGaps = data.research_gaps || [];
+            const emergingTrends = data.emerging_trends || [];
+            const researchOpportunities = data.research_opportunities || [];
+            
+            // Get paper count from either implementation
+            const paperCount = selectedPapers.length > 0 ? selectedPapers.length : lastSearchPapers.length;
+            
+            // Create a timestamp for the PDF filename
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+            const pdfFilename = `research-gaps-${field.replace(/\s+/g, '-').toLowerCase()}-${timestamp}`;
+            
+            // Update the results area
+            gapsResults.innerHTML = `
+                <div class="gaps-header">
+                    <h2>Research Analysis: ${field}</h2>
+                    <p>Based on analysis of ${paperCount} papers</p>
+                </div>
+                
+                <div class="gaps-sections">
+                    <div class="gaps-section">
+                        <h3><i class="fas fa-search"></i> Research Gaps</h3>
+                        <p class="section-description">Areas that appear under-explored in the current literature:</p>
+                        <ul class="gaps-list">
+                            ${researchGaps.map(gap => `<li>${gap}</li>`).join('') || '<li class="no-items">No significant research gaps identified.</li>'}
+                        </ul>
+                    </div>
+                    
+                    <div class="gaps-section">
+                        <h3><i class="fas fa-chart-line"></i> Emerging Trends</h3>
+                        <p class="section-description">New directions or methodologies gaining traction:</p>
+                        <ul class="gaps-list">
+                            ${emergingTrends.map(trend => `<li>${trend}</li>`).join('') || '<li class="no-items">No clear emerging trends identified.</li>'}
+                        </ul>
+                    </div>
+                    
+                    <div class="gaps-section">
+                        <h3><i class="fas fa-flask"></i> Research Opportunities</h3>
+                        <p class="section-description">Potential research questions or projects to address the gaps:</p>
+                        <ul class="gaps-list">
+                            ${researchOpportunities.map(opportunity => `<li>${opportunity}</li>`).join('') || '<li class="no-items">No specific research opportunities identified.</li>'}
+                        </ul>
+                    </div>
+                </div>
+                
+                <div class="gaps-actions">
+                    <button onclick="window.print()" class="action-button print-button">
+                        <i class="fas fa-print"></i> Print Analysis
+                    </button>
+                    <a href="/chat" class="action-button">
+                        <i class="fas fa-comments"></i> Discuss with AI
+                    </a>
+                </div>
+            `;
+            
+            // No need to store results anymore since we removed the PDF generation
+        }
+        
+        // Show error message
+        function showError(message) {
+            const gapsResults = document.getElementById('gapsResults');
+            gapsResults.innerHTML = `
+                <div class="error-container">
+                    <i class="fas fa-exclamation-circle error-icon"></i>
+                    <h3>Error</h3>
+                    <p>${message}</p>
+                </div>
+            `;
+        }
+    </script>
+</body>
+</html>

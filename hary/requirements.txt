@@ -1,0 +1,4 @@
+flask==2.0.1
+werkzeug==2.0.1
+semanticscholar==0.4.1
+groq==0.15.0

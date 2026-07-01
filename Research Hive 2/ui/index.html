@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Hive</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <h1>Research Hive - Search Papers</h1>
+
+    <input type="text" id="searchQuery" placeholder="Enter keywords or title">
+    <input type="number" id="maxResults" placeholder="Enter number of results" value="5">
+    <button onclick="searchPapers()">Search</button>
+
+    <div id="results"></div>
+
+    <script>
+        function searchPapers() {
+            let keywords = document.getElementById("searchQuery").value;
+            let maxResults = document.getElementById("maxResults").value || 5;
+
+            if (!keywords) {
+                alert("Please enter keywords or a title to search!");
+                return;
+            }
+
+            fetch(`/search?keywords=${encodeURIComponent(keywords)}&max_results=${maxResults}`)
+                .then(response => response.json())
+                .then(data => {
+                    let resultsDiv = document.getElementById("results");
+                    resultsDiv.innerHTML = "";
+
+                    if (data.error) {
+                        resultsDiv.innerHTML = `<p style="color:red;">Error: ${data.error}</p>`;
+                        return;
+                    }
+
+                    data.forEach(paper => {
+                        resultsDiv.innerHTML += `
+                            <div class="paper">
+                                <h3>${paper.title}</h3>
+                                <p><strong>Authors:</strong> ${paper.authors.join(", ")}</p>
+                                <p><strong>Published:</strong> ${paper.year}</p>
+                                <a href="${paper.url}" target="_blank">Read Paper</a>
+                            </div>
+                        `;
+                    });
+                })
+                .catch(error => {
+                    document.getElementById("results").innerHTML = `<p style="color:red;">Error fetching data.</p>`;
+                    console.error("Fetch error:", error);
+                });
+        }
+    </script>
+</body>
+</html>

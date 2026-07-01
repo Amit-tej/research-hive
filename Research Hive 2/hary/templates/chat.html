@@ -1,0 +1,514 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Hive - AI Research Assistant</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="{{ url_for('static', filename='chat.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">Research Hive <span class="ai-badge">AI-Enhanced</span></div>
+        <div class="nav-controls">
+            <a href="/" class="nav-link"><i class="fas fa-search"></i> Search</a>
+            <a href="/research-gaps" class="nav-link"><i class="fas fa-lightbulb"></i> Research Gaps</a>
+            <a href="/chat" class="nav-link active"><i class="fas fa-comments"></i> Chat</a>
+        </div>
+    </nav>
+
+    <header class="chat-hero">
+        <h1><i class="fas fa-robot"></i> AI Research Assistant</h1>
+        <p class="hero-subtitle">Ask questions about research papers, methodologies, or academic fields</p>
+    </header>
+
+    <div class="chat-container">
+        <div class="chat-options">
+            <div class="option-group">
+                <h3>Chat Mode</h3>
+                <div class="radio-group">
+                    <label class="radio-option">
+                        <input type="radio" name="chatMode" value="papers" checked id="papersMode">
+                        <span class="radio-label"><i class="fas fa-file-alt"></i> Based on Papers</span>
+                        <span class="radio-description">Answer questions using the papers from your last search</span>
+                    </label>
+                    <label class="radio-option">
+                        <input type="radio" name="chatMode" value="general" id="generalMode">
+                        <span class="radio-label"><i class="fas fa-globe"></i> General Knowledge</span>
+                        <span class="radio-description">Answer general questions about research methods and concepts</span>
+                    </label>
+                </div>
+            </div>
+            
+        <div class="option-group" id="papersList">
+            <h3>Using Papers</h3>
+            <div class="papers-count">
+                <span id="papersCount">No papers available</span>
+                <a href="/" class="small-button"><i class="fas fa-search"></i> Search Papers</a>
+            </div>
+        </div>
+
+        <div class="option-group">
+            <h3>Search and Add Papers</h3>
+            <input type="text" id="paperSearchInput" placeholder="Search papers to add..." class="search-input">
+            <div id="paperSearchResults" class="paper-search-results"></div>
+        </div>
+
+        <div class="option-group">
+            <h3>Selected Papers</h3>
+            <div id="selectedPapersList" class="selected-papers-list">
+                <p>No papers selected.</p>
+            </div>
+        </div>
+        
+        <div class="option-group">
+            <h3>Example Questions</h3>
+            <div class="example-questions">
+                <div class="example-question" onclick="setQuestion('What are the main findings of these papers?')">
+                    What are the main findings of these papers?
+                </div>
+                <div class="example-question" onclick="setQuestion('How do these papers relate to each other?')">
+                    How do these papers relate to each other?
+                </div>
+                <div class="example-question" onclick="setQuestion('What methodologies are used in these studies?')">
+                    What methodologies are used in these studies?
+                </div>
+                <div class="example-question" onclick="setQuestion('What are the limitations of these studies?')">
+                    What are the limitations of these studies?
+                </div>
+                <div class="example-question" onclick="setQuestion('How can I apply these findings in practice?')">
+                    How can I apply these findings in practice?
+                </div>
+            </div>
+        </div>
+        </div>
+        
+        <div class="chat-main">
+            <div class="chat-messages" id="chatMessages">
+                <div class="message system">
+                    <div class="message-avatar">
+                        <i class="fas fa-robot"></i>
+                    </div>
+                    <div class="message-content">
+                        <p>Hello! I'm your AI research assistant. Ask me questions about research papers, methodologies, or academic concepts.</p>
+                        <p>If you've searched for papers, I can answer questions about them specifically.</p>
+                    </div>
+                </div>
+                <!-- Messages will be added here dynamically -->
+            </div>
+            
+            <div class="chat-input-container">
+                <textarea id="questionInput" placeholder="Type your question here..." class="chat-input"></textarea>
+                <button id="sendButton" class="chat-send-button" onclick="sendQuestion()">
+                    <i class="fas fa-paper-plane"></i>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <footer>
+        <p>LEARNING THROUGH RESEARCH HIVE | <span class="ai-powered">AI-Powered by Groq</span></p>
+    </footer>
+
+    <script>
+        // Check if AI is available
+        const aiAvailable = {{ 'true' if ai_available else 'false' }};
+        let lastSearchPapers = [];
+        let lastSearchField = "";
+        let selectedPapers = [];
+        let searchTimeout = null;
+        
+        // Initialize chat
+        document.addEventListener('DOMContentLoaded', function() {
+            if (!aiAvailable) {
+                addSystemMessage("AI features are not available. Please set your API key in the settings.");
+            }
+            
+            // Load papers from session if available
+            checkSessionPapers();
+            
+            // Set up enter key to send message
+            document.getElementById('questionInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    sendQuestion();
+                }
+            });
+            
+            // Set up chat mode change
+            document.getElementById('papersMode').addEventListener('change', updateChatMode);
+            document.getElementById('generalMode').addEventListener('change', updateChatMode);
+            
+            // Set up paper search input listener
+            document.getElementById('paperSearchInput').addEventListener('input', function() {
+                const query = this.value.trim();
+                console.log('Input event on paperSearchInput, query:', query);
+                clearTimeout(searchTimeout);
+                if (query.length < 3) {
+                    console.log('Query too short, clearing results');
+                    document.getElementById('paperSearchResults').innerHTML = '';
+                    return;
+                }
+                searchTimeout = setTimeout(() => {
+                    console.log('Debounced search triggered for query:', query);
+                    searchPapers(query);
+                }, 500);
+            });
+            
+            // Trigger search immediately on Enter key press
+            document.getElementById('paperSearchInput').addEventListener('keypress', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const query = this.value.trim();
+                    console.log('Enter key pressed on paperSearchInput, query:', query);
+                    if (query.length >= 3) {
+                        clearTimeout(searchTimeout);
+                        searchPapers(query);
+                    }
+                }
+            });
+            
+            // Initial update
+            updateChatMode();
+        });
+        
+        // Check for papers in session
+        async function checkSessionPapers() {
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        keywords: 'artificial intelligence',
+                        max_results: 5,
+                        enable_ai: true
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (data.success && data.papers) {
+                    lastSearchPapers = data.papers;
+                    lastSearchField = "artificial intelligence";
+                    updatePapersCount();
+                }
+            } catch (error) {
+                console.error('Error checking session papers:', error);
+            }
+        }
+        
+        // Search for papers
+        async function searchPapers(query) {
+            const resultsContainer = document.getElementById('paperSearchResults');
+            resultsContainer.innerHTML = '<p>Searching...</p>';
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({keywords: query, max_results: 5, enable_ai: false})
+                });
+                const data = await response.json();
+                if (data.success && data.papers.length > 0) {
+                    displaySearchResults(data.papers);
+                } else {
+                    resultsContainer.innerHTML = '<p>No papers found.</p>';
+                }
+            } catch (error) {
+                resultsContainer.innerHTML = '<p>Error searching papers.</p>';
+                console.error('Search error:', error);
+            }
+        }
+        
+        // Display search results
+        function displaySearchResults(papers) {
+            const resultsContainer = document.getElementById('paperSearchResults');
+            resultsContainer.innerHTML = '';
+            papers.forEach((paper, index) => {
+                const paperDiv = document.createElement('div');
+                paperDiv.className = 'paper-result';
+                paperDiv.innerHTML = `
+                    <strong>${paper.title}</strong><br>
+                    <em>${paper.authors}</em> (${paper.year})
+                    <button onclick="addPaper(${index})" class="add-paper-button">Add</button>
+                `;
+                // Store paper data in element dataset for retrieval
+                paperDiv.dataset.paper = JSON.stringify(paper);
+                resultsContainer.appendChild(paperDiv);
+            });
+        }
+        
+        // Add paper to selected papers
+        function addPaper(index) {
+            const resultsContainer = document.getElementById('paperSearchResults');
+            const paperDiv = resultsContainer.children[index];
+            if (!paperDiv) return;
+            const paper = JSON.parse(paperDiv.dataset.paper);
+            if (selectedPapers.find(p => p.title === paper.title)) {
+                alert('Paper already selected.');
+                return;
+            }
+            selectedPapers.push(paper);
+            updateSelectedPapersList();
+        }
+        
+        // Remove paper from selected papers
+        function removePaper(index) {
+            selectedPapers.splice(index, 1);
+            updateSelectedPapersList();
+        }
+        
+        // Update selected papers list
+        function updateSelectedPapersList() {
+            const listContainer = document.getElementById('selectedPapersList');
+            listContainer.innerHTML = '';
+            if (selectedPapers.length === 0) {
+                listContainer.innerHTML = '<p>No papers selected.</p>';
+                return;
+            }
+            selectedPapers.forEach((paper, index) => {
+                const paperDiv = document.createElement('div');
+                paperDiv.className = 'selected-paper';
+                paperDiv.innerHTML = `
+                    <strong>${paper.title}</strong><br>
+                    <em>${paper.authors}</em> (${paper.year})
+                    <button onclick="removePaper(${index})" class="remove-paper-button">Remove</button>
+                `;
+                listContainer.appendChild(paperDiv);
+            });
+        }
+        
+        // Update papers count display
+        function updatePapersCount() {
+            const papersCountElement = document.getElementById('papersCount');
+            
+            if (lastSearchPapers.length > 0) {
+                papersCountElement.textContent = `Using ${lastSearchPapers.length} papers on "${lastSearchField}"`;
+                document.getElementById('papersMode').disabled = false;
+            } else {
+                papersCountElement.textContent = "No papers available";
+                document.getElementById('papersMode').disabled = true;
+                document.getElementById('generalMode').checked = true;
+            }
+            
+            updateChatMode();
+        }
+        
+        // Update chat mode based on selection
+        function updateChatMode() {
+            const papersMode = document.getElementById('papersMode').checked;
+            const papersList = document.getElementById('papersList');
+            
+            if (papersMode) {
+                papersList.style.display = 'block';
+                updateExampleQuestions('papers');
+            } else {
+                papersList.style.display = 'none';
+                updateExampleQuestions('general');
+            }
+        }
+        
+        // Update example questions based on mode
+        function updateExampleQuestions(mode) {
+            const exampleQuestions = document.querySelector('.example-questions');
+            
+            if (mode === 'papers') {
+                exampleQuestions.innerHTML = `
+                    <div class="example-question" onclick="setQuestion('What are the main findings of these papers?')">
+                        What are the main findings of these papers?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('How do these papers relate to each other?')">
+                        How do these papers relate to each other?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('What methodologies are used in these studies?')">
+                        What methodologies are used in these studies?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('What are the limitations of these studies?')">
+                        What are the limitations of these studies?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('How can I apply these findings in practice?')">
+                        How can I apply these findings in practice?
+                    </div>
+                `;
+            } else {
+                exampleQuestions.innerHTML = `
+                    <div class="example-question" onclick="setQuestion('What is the difference between qualitative and quantitative research?')">
+                        What is the difference between qualitative and quantitative research?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('How do I write a good literature review?')">
+                        How do I write a good literature review?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('What are the best statistical methods for analyzing survey data?')">
+                        What are the best statistical methods for analyzing survey data?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('How can I improve the validity of my research?')">
+                        How can I improve the validity of my research?
+                    </div>
+                    <div class="example-question" onclick="setQuestion('What are the ethical considerations in research with human subjects?')">
+                        What are the ethical considerations in research with human subjects?
+                    </div>
+                `;
+            }
+        }
+        
+        // Set question from example
+        function setQuestion(question) {
+            document.getElementById('questionInput').value = question;
+            document.getElementById('questionInput').focus();
+        }
+        
+        // Send question to API
+        async function sendQuestion() {
+            const questionInput = document.getElementById('questionInput');
+            const question = questionInput.value.trim();
+            
+            if (!question) return;
+            
+            // Add user message to chat
+            addUserMessage(question);
+            
+            // Clear input
+            questionInput.value = '';
+            
+            // Add loading message
+            const loadingId = addLoadingMessage();
+            
+            try {
+                // Get chat mode
+                const usePapers = document.getElementById('papersMode').checked;
+                
+                // Send question to API
+                const response = await fetch('/api/chat', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        question: question,
+                        use_papers: usePapers,
+                        papers: usePapers ? selectedPapers.length > 0 ? selectedPapers : lastSearchPapers : [],
+                        field: lastSearchField
+                    })
+                });
+                
+                const data = await response.json();
+                
+                // Remove loading message
+                removeMessage(loadingId);
+                
+                if (data.success) {
+                    // Add AI response to chat
+                    addAIMessage(data.answer);
+                } else {
+                    // Add error message
+                    addSystemMessage(data.error || "Sorry, I couldn't generate an answer. Please try again.");
+                }
+            } catch (error) {
+                console.error('Error sending question:', error);
+                removeMessage(loadingId);
+                addSystemMessage("An error occurred while processing your question. Please try again.");
+            }
+        }
+        
+        // Add user message to chat
+        function addUserMessage(message) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message user';
+            messageElement.innerHTML = `
+                <div class="message-avatar">
+                    <i class="fas fa-user"></i>
+                </div>
+                <div class="message-content">
+                    <p>${formatMessage(message)}</p>
+                </div>
+            `;
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        // Add AI message to chat
+        function addAIMessage(message) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message ai';
+            messageElement.innerHTML = `
+                <div class="message-avatar">
+                    <i class="fas fa-robot"></i>
+                </div>
+                <div class="message-content">
+                    <p>${formatMessage(message)}</p>
+                </div>
+            `;
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        // Add system message to chat
+        function addSystemMessage(message) {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message system';
+            messageElement.innerHTML = `
+                <div class="message-avatar">
+                    <i class="fas fa-info-circle"></i>
+                </div>
+                <div class="message-content">
+                    <p>${formatMessage(message)}</p>
+                </div>
+            `;
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+        }
+        
+        // Add loading message to chat
+        function addLoadingMessage() {
+            const chatMessages = document.getElementById('chatMessages');
+            const messageId = 'loading-' + Date.now();
+            const messageElement = document.createElement('div');
+            messageElement.className = 'message system';
+            messageElement.id = messageId;
+            messageElement.innerHTML = `
+                <div class="message-avatar">
+                    <i class="fas fa-spinner fa-spin"></i>
+                </div>
+                <div class="message-content">
+                    <p>Thinking...</p>
+                </div>
+            `;
+            chatMessages.appendChild(messageElement);
+            scrollToBottom();
+            return messageId;
+        }
+        
+        // Remove message by ID
+        function removeMessage(messageId) {
+            const messageElement = document.getElementById(messageId);
+            if (messageElement) {
+                messageElement.remove();
+            }
+        }
+        
+        // Format message with paragraphs and links
+        function formatMessage(message) {
+            // Replace newlines with paragraph breaks
+            let formatted = message.replace(/\n\n/g, '</p><p>').replace(/\n/g, '<br>');
+            
+            // Wrap in paragraph tags if not already
+            if (!formatted.startsWith('<p>')) {
+                formatted = '<p>' + formatted + '</p>';
+            }
+            
+            return formatted;
+        }
+        
+        // Scroll chat to bottom
+        function scrollToBottom() {
+            const chatMessages = document.getElementById('chatMessages');
+            chatMessages.scrollTop = chatMessages.scrollHeight;
+        }
+    </script>
+</body>
+</html>

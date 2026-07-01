@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Research Hive - AI-Enhanced Research</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='styles.css') }}">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="logo">Research Hive <span class="ai-badge">AI-Enhanced</span></div>
+        <div class="nav-controls">
+            <a href="/" class="nav-link active"><i class="fas fa-search"></i> Search</a>
+            <a href="/research-gaps" class="nav-link"><i class="fas fa-lightbulb"></i> Research Gaps</a>
+            <a href="/chat" class="nav-link"><i class="fas fa-comments"></i> Chat</a>
+        </div>
+    </nav>
+
+
+
+    <header class="hero">
+        <h1>AI-Enhanced Research Platform</h1>
+        <p class="hero-subtitle">Find, understand, and explore research papers with AI assistance</p>
+        <div class="search-container">
+            <input type="text" id="keywords" placeholder="Enter keywords (e.g., machine learning, AI)" class="search-input">
+            <input type="number" id="maxResults" value="10" min="1" max="20" class="number-input" title="Number of results (1-20)">
+            <div class="ai-toggle-container">
+                <label class="ai-toggle">
+                    <input type="checkbox" id="enableAI" checked>
+                    <span class="ai-toggle-slider"></span>
+                    <span class="ai-toggle-label">AI</span>
+                </label>
+            </div>
+            <button onclick="searchPapers()" class="search-button">Search</button>
+        </div>
+        
+        <div class="advanced-features">
+            <div class="feature-card">
+                <i class="fas fa-lightbulb feature-icon"></i>
+                <h3>Research Gap Finder</h3>
+                <p>Identify unexplored areas and emerging trends in your field</p>
+                <a href="/research-gaps" class="feature-link">Analyze Gaps</a>
+            </div>
+            <div class="feature-card">
+                <i class="fas fa-comments feature-icon"></i>
+                <h3>AI Research Assistant</h3>
+                <p>Ask questions about papers or research concepts</p>
+                <a href="/chat" class="feature-link">Chat Now</a>
+            </div>
+        </div>
+    </header>
+
+    <section id="relatedTopics" class="related-topics-section">
+        <!-- Related topics will be displayed here -->
+    </section>
+
+    <section id="results" class="results">
+        <!-- Results will be displayed here -->
+    </section>
+
+    <footer>
+        <p>LEARNING THROUGH RESEARCH HIVE | <span class="ai-powered">AI-Powered by Groq</span></p>
+    </footer>
+
+    <script>
+        // AI Status Management
+        let aiAvailable = {{ 'true' if ai_available else 'false' }};
+        
+        // Search Papers
+        async function searchPapers() {
+            const keywords = document.getElementById('keywords').value;
+            const maxResults = document.getElementById('maxResults').value;
+            const enableAI = document.getElementById('enableAI').checked && aiAvailable;
+            const resultsSection = document.getElementById('results');
+            const relatedTopicsSection = document.getElementById('relatedTopics');
+            
+            // Clear related topics
+            relatedTopicsSection.innerHTML = '';
+            
+            if (!keywords.trim()) {
+                resultsSection.innerHTML = '<div class="error">Please enter keywords to search</div>';
+                return;
+            }
+
+            resultsSection.innerHTML = '<div class="loading">Searching for relevant papers...</div>';
+
+            try {
+                const response = await fetch('/search', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                        keywords: keywords,
+                        max_results: maxResults,
+                        enable_ai: enableAI
+                    })
+                });
+
+                const data = await response.json();
+
+                if (data.success && data.papers.length > 0) {
+                    // Display related topics if available
+                    if (data.related_topics && data.related_topics.length > 0) {
+                        let topicsHtml = '<div class="related-topics-container">';
+                        topicsHtml += '<h3><i class="fas fa-lightbulb"></i> Related Research Topics</h3>';
+                        topicsHtml += '<div class="topics-list">';
+                        
+                        data.related_topics.forEach(topic => {
+                            topicsHtml += `<div class="topic-tag" onclick="document.getElementById('keywords').value='${topic}'; searchPapers();">${topic}</div>`;
+                        });
+                        
+                        topicsHtml += '</div></div>';
+                        relatedTopicsSection.innerHTML = topicsHtml;
+                    }
+                    
+                    // Display papers
+                    let html = `<h2 class="results-header">Found ${data.papers.length} relevant papers:</h2>`;
+                    html += '<div class="papers-list">';
+                    
+                    data.papers.forEach((paper, index) => {
+                        html += `
+                            <div class="paper-card">
+                                <span class="paper-number">${index + 1}</span>
+                                <h3 class="paper-title">${paper.title}</h3>
+                                <div class="paper-meta">
+                                    <p class="paper-authors">
+                                        <span class="meta-label">Authors:</span> ${paper.authors}
+                                    </p>
+                                    <p class="paper-year">
+                                        <span class="meta-label">Year:</span> ${paper.year}
+                                    </p>
+                                </div>`;
+                        
+                        // Add AI summary if available
+                        if (paper.ai_summary) {
+                            html += `
+                                <div class="ai-summary">
+                                    <h4><i class="fas fa-robot"></i> AI Summary</h4>
+                                    <p>${paper.ai_summary}</p>
+                                </div>`;
+                        }
+                        
+                        // Add original abstract
+                        html += `<div class="paper-abstract-container">
+                                    <h4>Abstract</h4>
+                                    <p class="paper-abstract">${paper.abstract}</p>
+                                </div>`;
+                        
+                        // Add AI impact analysis if available
+                        if (paper.ai_impact) {
+                            html += `
+                                <div class="ai-impact">
+                                    <h4><i class="fas fa-chart-line"></i> Impact Analysis</h4>
+                                    <p>${paper.ai_impact}</p>
+                                </div>`;
+                        }
+                        
+                        // Add AI research questions if available
+                        if (paper.ai_questions && paper.ai_questions.length > 0) {
+                            html += `
+                                <div class="ai-questions">
+                                    <h4><i class="fas fa-question-circle"></i> Research Questions</h4>
+                                    <ul>`;
+                            
+                            paper.ai_questions.forEach(question => {
+                                html += `<li>${question}</li>`;
+                            });
+                            
+                            html += `</ul>
+                                </div>`;
+                        }
+                        
+                        // Add technical term explanations if available
+                        if (paper.ai_terms && Object.keys(paper.ai_terms).length > 0) {
+                            html += `
+                                <div class="ai-terms">
+                                    <h4><i class="fas fa-book"></i> Technical Terms</h4>
+                                    <dl>`;
+                            
+                            for (const [term, explanation] of Object.entries(paper.ai_terms)) {
+                                html += `
+                                    <dt>${term}</dt>
+                                    <dd>${explanation}</dd>`;
+                            }
+                            
+                            html += `</dl>
+                                </div>`;
+                        }
+                        
+                        // Add paper link
+                        html += `<a href="${paper.url}" target="_blank" class="paper-link">View Full Paper →</a>
+                            </div>`;
+                    });
+                    
+                    html += '</div>';
+                    resultsSection.innerHTML = html;
+                } else {
+                    resultsSection.innerHTML = `
+                        <div class="error">
+                            <p>No papers found matching "${keywords}".</p>
+                            <p class="error-suggestion">Try:</p>
+                            <ul>
+                                <li>Using more specific keywords</li>
+                                <li>Checking for spelling errors</li>
+                                <li>Using fewer keywords</li>
+                            </ul>
+                        </div>`;
+                }
+            } catch (error) {
+                resultsSection.innerHTML = '<div class="error">An error occurred while searching. Please try again.</div>';
+                console.error('Search error:', error);
+            }
+        }
+
+        // Allow search when pressing Enter in the search input
+        document.getElementById('keywords').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                searchPapers();
+            }
+        });
+
+        // Set focus to search input on page load
+        window.onload = function() {
+            document.getElementById('keywords').focus();
+            checkAIStatus();
+        };
+    </script>
+</body>
+</html>
